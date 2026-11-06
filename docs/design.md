@@ -1,35 +1,79 @@
-# DevLens — Living Design Document
+# DevLens — System Design
 
-**Status:** Draft · Day 2
+**Document status:** Active / living design  
+**Project phase:** Pre-MVP  
+**Next target release:** `v0.1.0`  
+**Last revised:** 2026-11-06
 
-## 1. Problem and goal
-DevLens is an AI-assisted investigator for backend API test failures. Given a failed request (endpoint, expected and actual behavior, response, and later logs), it will inspect evidence and produce a structured diagnosis that distinguishes observations, hypotheses, and verification steps.
+This document describes the architecture, design rationale, interfaces, safety constraints, and planned evolution of DevLens. It is organized by **capability and release**, not by study day. Statements are labeled **Implemented**, **In progress**, or **Planned** where appropriate.
 
-## 2. Scope
-**Current (Day 2):** CLI-style proof of concept; one LLM call; Pydantic `InvestigationReport`; local validation exercises.
+## 1. Problem and goals
 
-**Planned:** Read-only code search and bounded file inspection, a controlled agent loop, evidence references, tracing, tests, and evaluation against a non-agent baseline.
+Backend API failures often surface as opaque HTTP errors. Developers need to connect symptoms to source code and logs while avoiding premature conclusions.
 
-**Non-goals for now:** Autonomous code edits, arbitrary shell execution, microservices, sophisticated orchestration frameworks.
+DevLens aims to:
 
-## 3. Architecture (planned, not yet implemented)
+1. Accept an API failure description (endpoint, expected/actual status, response, optional logs).
+2. Inspect a developer-selected Python repository through restricted read-only tools.
+3. Produce a typed investigation report with observations, hypotheses, and next steps.
+4. Make diagnostic claims traceable to available evidence as the evidence model evolves.
+5. Remain testable, bounded, and understandable without heavyweight infrastructure.
+
+### Non-goals for v0.1.0
+
+- Automatically changing source code or production infrastructure
+- Arbitrary command or shell execution
+- Guaranteed root-cause determination
+- General-purpose codebase Q&A or semantic vector search
+- Web UI, database, distributed services, or multi-agent coordination
+
+## 2. Architecture
+
+**Style:** Python modular monolith. A single application contains separate modules for schema, validation, repository tools, model interaction, and orchestration.
+
 ```text
-CLI / future HTTP API
-         |
-Investigation service
-         |
-Agent loop / orchestration
-      /       \
-LLM adapter   Read-only code tools
-         |
-Structured InvestigationReport
-         |
-Validation and future persistence
+User / CLI
+   |
+   v
+Failure input -> Agent harness <-> OpenAI Responses API
+                    |
+                    v
+             Tool dispatcher
+                    |
+             +------+------+
+             |             |
+         search_code     read_file
+             |             |
+             +------v------+
+              Local Python repo
+                    |
+                    v
+          InvestigationReport (Pydantic)
+                    |
+                    v
+             Business validator
+                    |
+                    v
+               CLI output
 ```
 
-Prefer a modular monolith: one deployable Python application with clear internal boundaries. Do not create modules before they are needed.
+**Current state:** Structured report generation and business validation are implemented. Repository tools are in progress; the harness and end-to-end CLI are planned.
 
-## 4. Current data contract
+### Module responsibilities
+
+| Module | Responsibility | Status |
+| --- | --- | --- |
+| `devlens/models.py` | Typed investigation report | Implemented |
+| `devlens/validation.py` | Business-rule validation | Implemented |
+| `devlens/tools.py` | Repository-scoped source inspection | In progress |
+| Agent harness / dispatcher | Bound model-requested tools and feed results back | Planned |
+| CLI entrypoint | Input, execution, and report display | Planned |
+| `tests/` | Deterministic validation and tool tests | Implemented / expanding |
+
+## 3. Data contract
+
+**Implemented** report schema:
+
 ```python
 from pydantic import BaseModel
 
@@ -39,50 +83,118 @@ class InvestigationReport(BaseModel):
     next_steps: list[str]
 ```
 
-- `observations`: facts supported by the provided input or retrieved evidence.
-- `hypotheses`: possible explanations; may be empty when evidence is insufficient.
-- `next_steps`: concrete actions to gather evidence or verify a hypothesis.
+- **Observations:** facts supported by provided inputs or inspected evidence.
+- **Hypotheses:** plausible but unconfirmed explanations; an empty list is valid.
+- **Next steps:** concrete ways to investigate or verify.
 
-**Current business checks:** observations and next_steps must each contain at least one item. These checks are currently separate from the Pydantic schema.
+**Implemented** business checks require at least one observation and one next step. The schema itself does not establish factual correctness.
 
-**Limitation:** Structural validity and simple business checks do not establish factual correctness.
+**Planned:** structured evidence references such as `{file, line_start, line_end, excerpt}` and stronger attribution requirements for observations.
 
-## 5. Request / investigation flow
-1. Receive failure information.
-2. Validate input (future typed request model).
-3. Call the LLM with instructions and structured output schema.
-4. Parse response into `InvestigationReport`.
-5. Check completion, parsing, and business constraints.
-6. Display report; later verify claims against evidence and store traces.
+## 4. Repository inspection tools
 
-## 6. Design decisions and tradeoffs
-| Decision | Why | Revisit when |
-|---|---|---|
-| Python | Fits LLM integration and source-code analysis | Another language offers a concrete advantage |
-| OpenAI SDK directly | Minimal abstraction; learn API and agent mechanics | Multi-provider or advanced orchestration becomes necessary |
-| Pydantic | Typed output and reusable validation | Requirements change significantly |
-| Modular monolith | Simple local development and debugging | Independent scaling or deployment becomes necessary |
-| No database yet | No persistent query requirement in current CLI | Investigation history and trace querying are implemented |
-| No LangChain/LangGraph yet | Single-call structured output does not require it | Stateful workflows or checkpointing justify it |
+**Status:** In progress; integration and tests must be verified before marking complete.
 
-## 7. Reliability and safety principles
-- Separate observations, hypotheses, and next steps.
-- Never present an unverified root cause as confirmed.
-- Future code tools must be read-only, repository-scoped, and bounded.
-- Bound tool calls, token usage, and execution time.
-- Treat exception handling, response validation, and evaluation as distinct concerns.
+### Intended interfaces
 
-## 8. Open questions
-- How should each observation cite exact evidence (file/line, log excerpt, or request input)?
-- Should validation failures trigger one repair attempt or return an explicit error?
-- What should an insufficient-information report look like?
-- Which real-world failure cases should form the evaluation dataset?
+- `search_code(query: str) -> list[dict]`: literal case-insensitive substring matches in Python source files, including repository-relative path, line number, and excerpt.
+- `read_file(relative_path: str, start_line: int, end_line: int) -> dict`: bounded line-numbered excerpt from a Python file.
 
-## 9. Implementation log
-- **Day 1:** OpenAI Responses API basic call and token usage.
-- **Day 2 Step 1:** Pydantic model validation and type coercion.
-- **Day 2 Step 2:** `InvestigationReport` model and manual validation.
-- **Day 2 Step 3:** `responses.parse(..., text_format=InvestigationReport)` succeeded; parsed object confirmed.
-- **Day 2 Step 4:** Separate validator for nonempty observations and next steps; local tests passed.
+### Safety and resource controls
 
-*Update this document when an architectural decision changes, not after every line of code.*
+- Scope access to a caller-selected repository root.
+- Reject absolute paths and traversal outside the root.
+- Restrict to Python source files for the initial MVP.
+- Skip generated/vendor/virtual-environment directories.
+- Limit file size, search hits, line ranges, and returned content.
+- Expose no shell execution or write tools to the model.
+
+**Known limitation:** Resolving paths before opening them is not a complete defense against symlink races or concurrently modified untrusted repositories. MVP use is restricted to trusted local repositories; stronger isolation is future work.
+
+### Design choice: standard library vs ripgrep
+
+Start with `pathlib` and standard-library file scanning for low setup cost and easy tests. Reconsider `ripgrep` when repository size or search latency justifies an external dependency.
+
+## 5. Agent orchestration
+
+**Status:** Planned for `v0.1.0`.
+
+The model proposes a function call; the application validates its name and arguments, executes an allowlisted tool, and returns the result to the model. The model must not receive arbitrary filesystem or process execution privileges.
+
+### Required harness controls
+
+- Explicit tool allowlist and argument validation
+- Maximum iterations / tool calls
+- Bounded tool output and timeouts where practical
+- Clear handling of API failures, tool errors, and incomplete responses
+- Final Pydantic parsing and business validation
+- Investigation trace useful for debugging and evaluation
+
+### Separation of reliability concerns
+
+1. **Exception handling:** network, API, parsing, and tool-execution failures.
+2. **Response validation:** schema and business constraints.
+3. **Evidence verification:** whether observations are supported by actual source material.
+4. **Evaluation:** effectiveness and correctness across a suite of known failures.
+
+These checks are complementary, not interchangeable.
+
+## 6. Technology decisions
+
+| Decision | Rationale | Revisit when |
+| --- | --- | --- |
+| Python | Fast iteration, strong AI ecosystem, readable tooling | Requirements demand another runtime |
+| OpenAI SDK directly | Learn tool-calling protocol and keep abstraction small | Workflow complexity warrants orchestration framework |
+| Pydantic | Typed boundary between model output and application logic | Contract needs substantial redesign |
+| pytest | Fast deterministic unit tests and fixtures | Additional integration/evaluation infrastructure needed |
+| Modular monolith | Clear boundaries without deployment overhead | Independent scaling or team ownership emerges |
+| No database for MVP | No persistent multi-user history required yet | Durable traces and querying become requirements |
+| CLI before API/UI | Fastest route to end-to-end evidence-backed demo | CLI workflow is stable |
+
+## 7. Testing and release acceptance
+
+### Current automated tests
+
+- Valid structured report passes business validation.
+- Empty hypotheses are allowed.
+- Empty observations or next steps are rejected.
+
+### v0.1.0 acceptance criteria
+
+- [ ] A documented CLI command accepts a failure case and repository path.
+- [ ] Agent can request and receive `search_code` and `read_file` results.
+- [ ] Tool execution is bounded and repository-scoped.
+- [ ] Final report conforms to `InvestigationReport` and passes business checks.
+- [ ] At least three reproducible bug fixtures are documented and exercised.
+- [ ] Tests pass in a fresh virtual environment.
+- [ ] README accurately reflects working features; demo can be reproduced.
+- [ ] Release tagged `v0.1.0` only after criteria are satisfied.
+
+## 8. Release roadmap
+
+| Version | Theme | Exit condition |
+| --- | --- | --- |
+| `v0.1.0` | Functional MVP | End-to-end CLI agent + tools + tests + demo fixtures |
+| `v0.2.0` | Evidence and reliability | Evidence attribution, stronger guardrails, evaluation baseline |
+| `v0.3.0` | API and persistence | HTTP interface and stored investigations, if needed |
+| `v1.0.0` | Stable release | Documented, tested, reproducible, stable core contract |
+| `v1.0.1+` | Maintenance | Bug fixes and security patches |
+| `v1.1.0+` | Extensions | Backward-compatible features |
+
+Roadmap versions are targets, not commitments. Release scope can change based on evaluation and actual needs.
+
+## 9. Open design questions
+
+- What is the minimal evidence-reference schema for verified observations?
+- How should the harness respond to insufficient evidence: report uncertainty, retry, or ask for logs?
+- What iteration/token budgets produce useful results at acceptable cost?
+- How should tests measure diagnosis quality versus mere schema compliance?
+- When do repository scale and performance justify ripgrep or indexing?
+
+## 10. Documentation and change policy
+
+- Update this document when architecture, tool contracts, safety rules, or release scope changes.
+- Update README when user-visible functionality, setup, or usage changes.
+- Record notable changes under `CHANGELOG.md` **Unreleased**; move them under a version heading when a release is tagged.
+- Prefer feature-oriented commits (`feat`, `fix`, `test`, `docs`, `refactor`, `chore`) and meaningful pull requests or commit messages.
+- Never mark planned work as implemented solely because code has been drafted.
