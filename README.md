@@ -4,7 +4,7 @@
 
 DevLens helps developers investigate failed API requests by combining structured incident information with read-only source-code inspection. Its goal is to produce actionable investigation reports that clearly distinguish **observations**, **hypotheses**, and **next steps**.
 
-> **Project status:** Pre-MVP development. The first functional release is planned as **v0.1.0**. Features marked *Planned* are not yet implemented.
+> **Project status:** Pre-MVP development. The first functional release is planned as **v0.1.0**. Agent orchestration and CLI code have been added but await end-to-end verification.
 
 ## Why DevLens?
 
@@ -16,14 +16,14 @@ An HTTP 500 response often reveals little about the underlying failure. Develope
 | --- | --- | --- |
 | Structured investigation reports | Implemented | OpenAI Responses API + Pydantic |
 | Business-rule validation | Implemented | Required observations and next steps |
-| Unit tests for report validation | Implemented | pytest |
-| Read-only `search_code` / `read_file` | In progress | Repository-scoped Python source inspection |
-| LLM function calling and bounded agent loop | Planned for v0.1.0 | Explicit tool dispatch and execution limits |
-| End-to-end CLI and reproducible bug fixtures | Planned for v0.1.0 | Demonstrable investigation workflow |
+| Automated unit tests | Implemented | 17 passing tests across validation, code tools, and dispatcher |
+| Read-only `search_code` / `read_file` | Implemented, unit tested | Repository-scoped Python source inspection |
+| LLM function calling and bounded agent loop | Implemented, E2E unverified | Allowlisted dispatcher; tool-call budget; sequential calls |
+| CLI and sample bug fixture | Implemented, E2E unverified | `run_investigation.py` and `examples/buggy_api/app.py` |
 | Evidence attribution and evaluation suite | Planned | Trace claims to code/logs and benchmark cases |
 | HTTP API, persistence, deployment | Future | Added when justified by product requirements |
 
-## Architecture (target for v0.1.0)
+## Architecture (v0.1.0 implementation in verification)
 
 ```text
 API failure details + optional logs + repository path
@@ -48,7 +48,7 @@ API failure details + optional logs + repository path
               Structured output
 ```
 
-The architecture above is a **target**, not a claim that the end-to-end loop is already working. See [Design](docs/design.md) for current implementation boundaries and design decisions.
+The modules shown above have been implemented as a prototype, but the complete LLM-driven CLI flow has not yet been verified end to end. See [Design](docs/design.md) for implementation boundaries and design decisions.
 
 ## Tech stack
 
@@ -84,13 +84,19 @@ python -m pip check
 python -m pytest tests/ -v
 ```
 
-To run the current structured-report prototype (uses the API and may incur cost):
+To run the structured-report prototype (uses the API and may incur cost):
 
 ```powershell
 python structured_report.py
 ```
 
-**Note:** The complete CLI agent is not available until the v0.1.0 milestone. Do not treat the prototype as an evidence-verified root-cause diagnosis.
+To try the **experimental agent CLI** against the intentionally buggy example repository (uses the API and may incur cost):
+
+```powershell
+python run_investigation.py --repo examples/buggy_api --failure "GET /api/users/999 expected HTTP 404 but returned HTTP 500 with body: Internal Server Error"
+```
+
+The CLI code is implemented, but its complete model-to-tool-to-report flow is **pending end-to-end verification**. The example is a simulated Python handler, not a running HTTP server. Reports are not yet independently evidence-verified.
 
 ## Engineering principles
 
@@ -117,7 +123,7 @@ See [CHANGELOG](CHANGELOG.md) for feature-based progress and release notes. Git 
 
 ## Current limitations
 
-DevLens is a development-stage prototype. Its current structured reports are generated from supplied failure details and **do not independently verify a root cause**. Code-inspection tools, agent orchestration, and evaluation are being integrated.
+DevLens is a development-stage prototype. The repository inspection tools and tool dispatcher have passing unit tests, but the complete agent CLI has not yet been verified end to end. Reports do **not independently verify a root cause** or enforce evidence references. The current file-access checks are intended for trusted local repositories, not as a hardened sandbox. Automated agent integration tests, evaluation, and stronger safety controls remain future work.
 
 ## License
 

@@ -1,4 +1,3 @@
-
 from devlens.models import InvestigationReport
 from devlens.validation import validate_report
 

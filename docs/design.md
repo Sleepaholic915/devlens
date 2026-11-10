@@ -3,7 +3,7 @@
 **Document status:** Active / living design  
 **Project phase:** Pre-MVP  
 **Next target release:** `v0.1.0`  
-**Last revised:** 2026-11-06
+**Last revised:** 2026-11-10
 
 This document describes the architecture, design rationale, interfaces, safety constraints, and planned evolution of DevLens. It is organized by **capability and release**, not by study day. Statements are labeled **Implemented**, **In progress**, or **Planned** where appropriate.
 
@@ -57,7 +57,7 @@ Failure input -> Agent harness <-> OpenAI Responses API
                CLI output
 ```
 
-**Current state:** Structured report generation and business validation are implemented. Repository tools are in progress; the harness and end-to-end CLI are planned.
+**Current state:** Structured reports, business validation, repository tools, and tool dispatch are implemented and unit tested. The CLI and agent loop have now completed one live investigation of the bundled buggy API; automated end-to-end tests and additional fixtures remain pending.
 
 ### Module responsibilities
 
@@ -65,10 +65,10 @@ Failure input -> Agent harness <-> OpenAI Responses API
 | --- | --- | --- |
 | `devlens/models.py` | Typed investigation report | Implemented |
 | `devlens/validation.py` | Business-rule validation | Implemented |
-| `devlens/tools.py` | Repository-scoped source inspection | In progress |
-| Agent harness / dispatcher | Bound model-requested tools and feed results back | Planned |
-| CLI entrypoint | Input, execution, and report display | Planned |
-| `tests/` | Deterministic validation and tool tests | Implemented / expanding |
+| `devlens/tools.py` | Repository-scoped source inspection | Implemented; unit tested |
+| `devlens/agent.py` | Tool definitions, allowlisted dispatcher, bounded agent loop, final report parsing | Implemented; dispatcher unit tested; one live E2E demo passed |
+| `run_investigation.py` | CLI input, investigation execution, report display | Implemented; one live E2E demo passed |
+| `tests/` | Validation, repository tools, and dispatcher unit tests | Implemented; 17 passing |
 
 ## 3. Data contract
 
@@ -93,9 +93,9 @@ class InvestigationReport(BaseModel):
 
 ## 4. Repository inspection tools
 
-**Status:** In progress; integration and tests must be verified before marking complete.
+**Status:** Implemented and unit tested; exercised by one live CLI investigation.
 
-### Intended interfaces
+### Implemented interfaces
 
 - `search_code(query: str) -> list[dict]`: literal case-insensitive substring matches in Python source files, including repository-relative path, line number, and excerpt.
 - `read_file(relative_path: str, start_line: int, end_line: int) -> dict`: bounded line-numbered excerpt from a Python file.
@@ -117,18 +117,29 @@ Start with `pathlib` and standard-library file scanning for low setup cost and e
 
 ## 5. Agent orchestration
 
-**Status:** Planned for `v0.1.0`.
+**Status:** Implemented as a prototype; one live end-to-end CLI investigation succeeded. Automated agent-loop integration tests remain pending.
 
-The model proposes a function call; the application validates its name and arguments, executes an allowlisted tool, and returns the result to the model. The model must not receive arbitrary filesystem or process execution privileges.
+The model proposes a function call; the application dispatches allowlisted tool names and arguments to `CodeTools`, serializes the result, and returns it to the model. The model does not directly execute local Python functions or shell commands.
 
-### Required harness controls
+### Implemented investigation flow
 
-- Explicit tool allowlist and argument validation
-- Maximum iterations / tool calls
-- Bounded tool output and timeouts where practical
-- Clear handling of API failures, tool errors, and incomplete responses
-- Final Pydantic parsing and business validation
-- Investigation trace useful for debugging and evaluation
+1. The CLI passes the failure description and repository root to `investigate()`.
+2. `responses.create()` exposes `search_code` and `read_file` via strict function schemas.
+3. The harness extracts function calls and dispatches them through `execute_tool()`.
+4. Tool results are returned as `function_call_output` items with matching `call_id` values.
+5. The loop continues until the model stops requesting tools or the configured tool-call budget is reached.
+6. A separate `responses.parse()` call produces an `InvestigationReport`.
+7. `validate_report()` checks the report's business constraints; the CLI displays the report and tool trace.
+
+Parallel tool calls are disabled to simplify budgeting. The default tool-call limit is eight. Tool errors are serialized as `{"ok": false, "error": ...}` rather than executing arbitrary operations. These controls were exercised during one live CLI run; budget-exhaustion behavior has not been tested.
+
+### Harness controls and remaining gaps
+
+**Implemented:** explicit tool allowlist; strict tool argument schemas; Python-side path and read limits; bounded tool-call count; tool-error serialization; completed-response checks; final Pydantic parsing and business validation; in-memory tool trace.
+
+**Pending:** repeated end-to-end verification and mocked tests of multi-step tool-call continuation and budget exhaustion; total model-request, token, and wall-clock budgets; comprehensive API error handling and recovery; independently verified evidence attribution.
+
+**Known edge case to test:** response continuation and tool-call bookkeeping at the budget boundary, especially if the model requests further tools. The tool-call count alone does not cap total model usage.
 
 ### Separation of reliability concerns
 
@@ -155,19 +166,33 @@ These checks are complementary, not interchangeable.
 
 ### Current automated tests
 
-- Valid structured report passes business validation.
-- Empty hypotheses are allowed.
-- Empty observations or next steps are rejected.
+**Verified locally (Windows, Python 3.11.9, pytest 9.2.0): 17 passed.**
+
+- **5 validation tests:** valid reports, empty hypotheses, required observations/next steps.
+- **8 repository tool tests:** search, case-insensitivity, bounded reads, path restrictions, file types, result limit.
+- **4 dispatcher tests:** successful search, unknown tool rejection, invalid JSON, and path escape rejection.
+
+These are **unit tests**; they do not measure LLM diagnosis accuracy. One separate live CLI run successfully completed the investigation pipeline.
+
+### Live CLI verification (2026-11-10)
+
+A manual run investigated `GET /api/users/999` (expected 404, observed 500) against `examples/buggy_api`.
+
+- The agent made **five tool requests** in order: `search_code("/api/users")`, `search_code("users")`, `read_file("app.py", 1, 100)`, `read_file("app.py", 1, 30)`, and `search_code("404")`.
+- The final report correctly identified the unchecked `USERS.get(user_id)` lookup and the broad exception handler that converts errors into a 500-style response.
+- The report explicitly acknowledged that the example repository does not show HTTP route wiring, so it did not claim to have verified the actual route.
+- The first `read_file` request exceeded the configured 80-line limit; the subsequent 30-line request illustrates recovery from a likely tool validation error. The CLI trace did not print tool outputs, so the precise result of each request was not independently inspected.
+- This is **one manual smoke test**, not a reproducible evaluation suite or proof of consistent diagnosis quality.
 
 ### v0.1.0 acceptance criteria
 
-- [ ] A documented CLI command accepts a failure case and repository path.
-- [ ] Agent can request and receive `search_code` and `read_file` results.
-- [ ] Tool execution is bounded and repository-scoped.
-- [ ] Final report conforms to `InvestigationReport` and passes business checks.
+- [x] A documented CLI command accepts a failure case and repository path (manually exercised).
+- [x] Agent can request `search_code` and `read_file` and complete a multi-step investigation (manual smoke test).
+- [x] Tool execution has repository-scoped checks and a tool-call budget (unit-tested components; not a hardened sandbox).
+- [x] A live investigation produced an `InvestigationReport` and passed business checks.
 - [ ] At least three reproducible bug fixtures are documented and exercised.
-- [ ] Tests pass in a fresh virtual environment.
-- [ ] README accurately reflects working features; demo can be reproduced.
+- [ ] Tests pass in a newly created virtual environment (17 tests passed in the current `.venv`).
+- [ ] README reflects working features; demo command documented, but fresh-environment reproducibility not yet verified.
 - [ ] Release tagged `v0.1.0` only after criteria are satisfied.
 
 ## 8. Release roadmap
@@ -187,6 +212,7 @@ Roadmap versions are targets, not commitments. Release scope can change based on
 
 - What is the minimal evidence-reference schema for verified observations?
 - How should the harness respond to insufficient evidence: report uncertainty, retry, or ask for logs?
+- How should the agent handle continuation and tool-call budgets at edge cases, including interrupted or incomplete tool exchanges?
 - What iteration/token budgets produce useful results at acceptable cost?
 - How should tests measure diagnosis quality versus mere schema compliance?
 - When do repository scale and performance justify ripgrep or indexing?
@@ -198,3 +224,6 @@ Roadmap versions are targets, not commitments. Release scope can change based on
 - Record notable changes under `CHANGELOG.md` **Unreleased**; move them under a version heading when a release is tagged.
 - Prefer feature-oriented commits (`feat`, `fix`, `test`, `docs`, `refactor`, `chore`) and meaningful pull requests or commit messages.
 - Never mark planned work as implemented solely because code has been drafted.
+
+
+
