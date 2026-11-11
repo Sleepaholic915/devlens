@@ -123,15 +123,34 @@ The model proposes a function call; the application dispatches allowlisted tool 
 
 ### Implemented investigation flow
 
-1. The CLI passes the failure description and repository root to `investigate()`.
-2. `responses.create()` exposes `search_code` and `read_file` via strict function schemas.
-3. The harness extracts function calls and dispatches them through `execute_tool()`.
-4. Tool results are returned as `function_call_output` items with matching `call_id` values.
-5. The loop continues until the model stops requesting tools or the configured tool-call budget is reached.
-6. A separate `responses.parse()` call produces an `InvestigationReport`.
-7. `validate_report()` checks the report's business constraints; the CLI displays the report and tool trace.
+1. The CLI passes the failure description and selected repository root to `investigate()`.
+2. `responses.create()` provides strict definitions for `search_code` and `read_file`.
+3. The harness extracts `function_call` items from `response.output` **before inspecting the `calls` variable**.
+4. `execute_tool()` runs the allowed Python tool and serializes a success or error result.
+5. The harness appends a `function_call_output` item with the matching `call_id` and continues the conversation.
+6. The loop stops when the model stops requesting tools or the configured tool-call budget is exhausted.
+7. A separate `responses.parse()` call produces an `InvestigationReport`, which is checked by `validate_report()`.
 
-Parallel tool calls are disabled to simplify budgeting. The default tool-call limit is eight. Tool errors are serialized as `{"ok": false, "error": ...}` rather than executing arbitrary operations. These controls were exercised during one live CLI run; budget-exhaustion behavior has not been tested.
+The default budget is eight tool calls, and `parallel_tool_calls=False` requests sequential tool use. The application also checks for unexpectedly multiple calls. These are controls for a prototype, not a complete model-request, time, or token budget.
+
+### Mock Responses API testing
+
+**In progress.** `tests/test_agent.py` now uses `unittest.mock.Mock` and simulated response objects to exercise the orchestration code without calling the real API. Mocking makes the sequence of tool requests deterministic and avoids API costs. The new scenarios cover:
+
+- Tool execution, conversation continuation, and a typed final report.
+- Tool-error recovery across two model responses.
+- Enforcement of `max_tool_calls`.
+- Rejection of a nonpositive tool-call budget.
+
+The latest run collected 21 tests: 18 passed and three mocked-loop tests failed with `UnboundLocalError` because `len(calls)` was evaluated before `calls` was assigned. The invalid-budget test passed. A corrected ordering has been proposed, but **the three tests must be rerun before they can be marked passing**. Mock tests verify orchestration behavior; they do not establish the accuracy of model diagnoses.
+
+### Tool error recovery
+
+**Implemented at the dispatcher boundary; automated multi-turn verification pending.** `execute_tool()` returns structured JSON for success (`ok: true`, `result`) or failure (`ok: false`, `error`). A tool error is returned to the model as a normal tool result so the model can attempt a corrected call. In the first live demo, the model requested a 100-line read (above the 80-line limit) and later requested a 30-line read. This is consistent with recovery, but the original CLI trace did not show individual tool results, so the exact error response was not confirmed from that run.
+
+### Structured tool trace and observability
+
+**Implemented in code changes; automated verification pending.** The trace is intended to store each tool name, JSON arguments, `ok` status, optional result, and optional error. The CLI can display `[OK]` or `[ERROR]` and an error reason, making tool execution easier to debug. This is an in-memory diagnostic trace, not persistent logging, and it does not by itself verify evidence quality.
 
 ### Harness controls and remaining gaps
 

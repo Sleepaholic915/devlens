@@ -129,22 +129,27 @@ def investigate(
             tool_choice="required" if tool_count == 0 else "auto",
             parallel_tool_calls=False,
         )
-
+        
         if response.status != "completed":
             raise RuntimeError(
                 f"Investigation response status: {response.status}"
             )
+        
+        calls = [
+                    item for item in response.output
+                    if item.type == "function_call"
+                ]
 
+        
+        if len(calls) > 1:
+            raise RuntimeError(
+                "Multiple tool calls received despite parallel_tool_calls=False"
+            )
         # Preserve all response items, including reasoning items.
         conversation.extend(
             item.model_dump(exclude_none=True)
             for item in response.output
         )
-
-        calls = [
-            item for item in response.output
-            if item.type == "function_call"
-        ]
 
         if not calls:
             break
@@ -153,17 +158,23 @@ def investigate(
             if tool_count >= max_tool_calls:
                 break
 
+            
             output = execute_tool(
                 tools,
                 call.name,
                 call.arguments,
             )
 
+            tool_result = json.loads(output)
+
             trace.append({
                 "tool": call.name,
                 "arguments": call.arguments,
-                "output": output,
+                "ok": tool_result["ok"],
+                "result": tool_result.get("result"),
+                "error": tool_result.get("error"),
             })
+
 
             conversation.append({
                 "type": "function_call_output",

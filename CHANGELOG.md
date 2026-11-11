@@ -14,6 +14,9 @@ Notable changes to DevLens are tracked here. The project follows [Semantic Versi
 - Experimental CLI entrypoint (`run_investigation.py`) and an intentionally buggy Python API fixture.
 - First successful live CLI smoke test: five model-requested code inspections and a structured diagnosis of the missing-user 500 response (2026-11-10).
 - Living system design document and release-oriented documentation.
+- Deterministic agent-loop tests using mocked OpenAI Responses API calls.
+- Structured tool execution traces with success and error information.
+- Tests for tool error recovery and maximum tool-call budgets.
 
 ### In progress
 - Automated end-to-end regression tests and repeatability checks for the CLI investigation flow.

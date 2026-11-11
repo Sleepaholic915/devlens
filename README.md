@@ -18,7 +18,7 @@ An HTTP 500 response often reveals little about the underlying failure. Develope
 | Business-rule validation | Implemented | Required observations and next steps |
 | Automated unit tests | Implemented | 17 passing tests across validation, code tools, and dispatcher |
 | Read-only `search_code` / `read_file` | Implemented, unit tested | Repository-scoped Python source inspection |
-| LLM function calling and bounded agent loop | Implemented, E2E unverified | Allowlisted dispatcher; tool-call budget; sequential calls |
+| LLM function calling and bounded agent loop | Implemented, Tested | Allowlisted dispatcher; tool-call budget; sequential calls; Mock Integration Tests; Structured Tool Trace |
 | CLI and sample bug fixture | Implemented, E2E unverified | `run_investigation.py` and `examples/buggy_api/app.py` |
 | Evidence attribution and evaluation suite | Planned | Trace claims to code/logs and benchmark cases |
 | HTTP API, persistence, deployment | Future | Added when justified by product requirements |

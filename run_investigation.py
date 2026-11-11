@@ -34,9 +34,20 @@ def main():
         repo_root=args.repo,
     )
 
+    
     print("\n=== Tool Trace ===")
+
     for index, call in enumerate(trace, start=1):
-        print(f"{index}. {call['tool']}: {call['arguments']}")
+        status = "OK" if call["ok"] else "ERROR"
+
+        print(
+            f"{index}. [{status}] "
+            f"{call['tool']}: {call['arguments']}"
+        )
+
+        if not call["ok"]:
+            print(f"   Reason: {call['error']}")
+
 
     print("\n=== Investigation Report ===")
     print(report.model_dump_json(indent=2))
