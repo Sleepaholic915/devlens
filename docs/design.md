@@ -3,7 +3,7 @@
 **Document status:** Active / living design  
 **Project phase:** Pre-MVP  
 **Next target release:** `v0.1.0`  
-**Last revised:** 2026-11-10
+**Last revised:** 2026-11-11
 
 This document describes the architecture, design rationale, interfaces, safety constraints, and planned evolution of DevLens. It is organized by **capability and release**, not by study day. Statements are labeled **Implemented**, **In progress**, or **Planned** where appropriate.
 
@@ -57,7 +57,7 @@ Failure input -> Agent harness <-> OpenAI Responses API
                CLI output
 ```
 
-**Current state:** Structured reports, business validation, repository tools, and tool dispatch are implemented and unit tested. The CLI and agent loop have now completed one live investigation of the bundled buggy API; automated end-to-end tests and additional fixtures remain pending.
+**Current state:** Structured reports, business validation, repository tools, and tool dispatch are implemented and unit tested. The CLI and agent loop have completed live investigations on three simulated API failures; mocked agent-loop tests pass, and a three-case evaluation runner is implemented. Repeated real-model regression checks remain pending.
 
 ### Module responsibilities
 
@@ -66,9 +66,12 @@ Failure input -> Agent harness <-> OpenAI Responses API
 | `devlens/models.py` | Typed investigation report | Implemented |
 | `devlens/validation.py` | Business-rule validation | Implemented |
 | `devlens/tools.py` | Repository-scoped source inspection | Implemented; unit tested |
-| `devlens/agent.py` | Tool definitions, allowlisted dispatcher, bounded agent loop, final report parsing | Implemented; dispatcher unit tested; one live E2E demo passed |
-| `run_investigation.py` | CLI input, investigation execution, report display | Implemented; one live E2E demo passed |
-| `tests/` | Validation, repository tools, and dispatcher unit tests | Implemented; 17 passing |
+| `devlens/agent.py` | Tool definitions, allowlisted dispatcher, bounded agent loop, final report parsing | Implemented; mocked agent-loop tests passed; live CLI exercised |
+| `run_investigation.py` | CLI input, investigation execution, report display | Implemented; live CLI exercised |
+| `tests/` | Validation, repository tools, dispatcher, mocked agent-loop, and fixture/evaluation tests | 25 tests passing in the reported full pytest suite |
+| `evals/cases.json` | Evaluation cases and expected root causes | Implemented |
+| `evals/run_evals.py` | Run cases and persist JSON investigation artifacts | Implemented; live run completed |
+| `evals/summarize.py` | Aggregate operational evaluation metrics | Implemented; summary executed |
 
 ## 3. Data contract
 
@@ -93,7 +96,7 @@ class InvestigationReport(BaseModel):
 
 ## 4. Repository inspection tools
 
-**Status:** Implemented and unit tested; exercised by one live CLI investigation.
+**Status:** Implemented and unit tested; exercised by multiple live CLI investigations.
 
 ### Implemented interfaces
 
@@ -117,7 +120,7 @@ Start with `pathlib` and standard-library file scanning for low setup cost and e
 
 ## 5. Agent orchestration
 
-**Status:** Implemented as a prototype; one live end-to-end CLI investigation succeeded. Automated agent-loop integration tests remain pending.
+**Status:** Implemented as a prototype; live CLI investigations and deterministic mocked agent-loop tests have succeeded.
 
 The model proposes a function call; the application dispatches allowlisted tool names and arguments to `CodeTools`, serializes the result, and returns it to the model. The model does not directly execute local Python functions or shell commands.
 
@@ -135,28 +138,28 @@ The default budget is eight tool calls, and `parallel_tool_calls=False` requests
 
 ### Mock Responses API testing
 
-**In progress.** `tests/test_agent.py` now uses `unittest.mock.Mock` and simulated response objects to exercise the orchestration code without calling the real API. Mocking makes the sequence of tool requests deterministic and avoids API costs. The new scenarios cover:
+**Implemented and passing (as reported after fixing the variable-order bug).** `tests/test_agent.py` uses `unittest.mock.Mock` and simulated response objects to exercise the orchestration code without calling the real API. Mocking makes the sequence of tool requests deterministic and avoids API costs. The new scenarios cover:
 
 - Tool execution, conversation continuation, and a typed final report.
 - Tool-error recovery across two model responses.
 - Enforcement of `max_tool_calls`.
 - Rejection of a nonpositive tool-call budget.
 
-The latest run collected 21 tests: 18 passed and three mocked-loop tests failed with `UnboundLocalError` because `len(calls)` was evaluated before `calls` was assigned. The invalid-budget test passed. A corrected ordering has been proposed, but **the three tests must be rerun before they can be marked passing**. Mock tests verify orchestration behavior; they do not establish the accuracy of model diagnoses.
+After correcting the order of `calls` extraction and validation, the user confirmed that all 21 then-existing tests passed. Mock tests verify orchestration behavior; they do not establish the accuracy of model diagnoses.
 
 ### Tool error recovery
 
-**Implemented at the dispatcher boundary; automated multi-turn verification pending.** `execute_tool()` returns structured JSON for success (`ok: true`, `result`) or failure (`ok: false`, `error`). A tool error is returned to the model as a normal tool result so the model can attempt a corrected call. In the first live demo, the model requested a 100-line read (above the 80-line limit) and later requested a 30-line read. This is consistent with recovery, but the original CLI trace did not show individual tool results, so the exact error response was not confirmed from that run.
+**Implemented at the dispatcher boundary; mocked multi-turn recovery tested.** `execute_tool()` returns structured JSON for success (`ok: true`, `result`) or failure (`ok: false`, `error`). A tool error is returned to the model as a normal tool result so the model can attempt a corrected call. In the first live demo, the model requested a 100-line read (above the 80-line limit) and later requested a 30-line read. Subsequent live CLI traces confirmed `[ERROR]` on oversized reads followed by successful corrected reads.
 
 ### Structured tool trace and observability
 
-**Implemented in code changes; automated verification pending.** The trace is intended to store each tool name, JSON arguments, `ok` status, optional result, and optional error. The CLI can display `[OK]` or `[ERROR]` and an error reason, making tool execution easier to debug. This is an in-memory diagnostic trace, not persistent logging, and it does not by itself verify evidence quality.
+**Implemented and exercised in live CLI runs.** The trace is intended to store each tool name, JSON arguments, `ok` status, optional result, and optional error. The CLI can display `[OK]` or `[ERROR]` and an error reason, making tool execution easier to debug. This is an in-memory diagnostic trace, not persistent logging, and it does not by itself verify evidence quality.
 
 ### Harness controls and remaining gaps
 
 **Implemented:** explicit tool allowlist; strict tool argument schemas; Python-side path and read limits; bounded tool-call count; tool-error serialization; completed-response checks; final Pydantic parsing and business validation; in-memory tool trace.
 
-**Pending:** repeated end-to-end verification and mocked tests of multi-step tool-call continuation and budget exhaustion; total model-request, token, and wall-clock budgets; comprehensive API error handling and recovery; independently verified evidence attribution.
+**Pending:** repeated live-model end-to-end regression checks; total model-request, token, and wall-clock budgets; comprehensive API error handling and recovery; independently verified evidence attribution.
 
 **Known edge case to test:** response continuation and tool-call bookkeeping at the budget boundary, especially if the model requests further tools. The tool-call count alone does not cap total model usage.
 
@@ -185,15 +188,18 @@ These checks are complementary, not interchangeable.
 
 ### Current automated tests
 
-**Verified locally (Windows, Python 3.11.9, pytest 9.2.0): 17 passed.**
+**Latest reported full pytest run: 25 passed in 0.64s (25 collected)**. The suite includes unit tests, mocked agent-loop tests, fixture reproduction tests, and evaluation-summary tests.
 
 - **5 validation tests:** valid reports, empty hypotheses, required observations/next steps.
 - **8 repository tool tests:** search, case-insensitivity, bounded reads, path restrictions, file types, result limit.
 - **4 dispatcher tests:** successful search, unknown tool rejection, invalid JSON, and path escape rejection.
+- **4 mocked agent-loop tests:** tool execution/continuation, error recovery, tool budget, and invalid budget.
+- **2 fixture reproduction tests:** incorrect total and missing authorization.
+- **2 evaluation-summary tests:** metric calculations and empty evaluation results.
 
-These are **unit tests**; they do not measure LLM diagnosis accuracy. One separate live CLI run successfully completed the investigation pipeline.
+These deterministic tests do not measure LLM diagnosis accuracy. Separate live CLI investigations and a three-case evaluation run exercised the investigation pipeline.
 
-### Live CLI verification (2026-11-10)
+### Initial live CLI verification (2026-11-10)
 
 A manual run investigated `GET /api/users/999` (expected 404, observed 500) against `examples/buggy_api`.
 
@@ -203,23 +209,66 @@ A manual run investigated `GET /api/users/999` (expected 404, observed 500) agai
 - The first `read_file` request exceeded the configured 80-line limit; the subsequent 30-line request illustrates recovery from a likely tool validation error. The CLI trace did not print tool outputs, so the precise result of each request was not independently inspected.
 - This is **one manual smoke test**, not a reproducible evaluation suite or proof of consistent diagnosis quality.
 
+### Evaluation framework
+
+DevLens includes a small evaluation dataset consisting of three
+reproducible API failure scenarios:
+
+1. Missing user handling: an unknown user ID produces a 500 instead
+   of the expected 404.
+2. Incorrect total calculation: a fractional discount is incorrectly
+   subtracted as a fixed amount.
+3. Missing authorization: an order is returned without checking
+   resource ownership.
+
+Each evaluation case defines a failure description and expected
+root cause. Ground-truth information is stored separately from the
+failure description passed to the agent.
+
+The evaluation runner executes each investigation and records:
+- Investigation status
+- Structured investigation report
+- Tool execution trace
+- Number of tool calls
+
+The summary utility calculates:
+- Completion rate
+- Report validity rate
+- Tool success rate
+- Average tool calls per case
+
+These metrics measure execution reliability and output validity.
+Root-cause correctness is currently assessed through manual review
+rather than automated grading.
+
+Current limitations:
+- Only three small, simulated Python API scenarios are evaluated.
+- Results from one evaluation run do not establish statistical reliability.
+- The fixtures do not exercise a deployed HTTP service.
+- Automated root-cause scoring is not yet implemented.
+
+### Recorded evaluation baseline
+
+A saved run (`20261111T150652Z`) recorded 3/3 completed investigations, 8/8 successful tool calls, and 3/3 valid reports (2.67 calls/case). These are **operational metrics**, not automated root-cause accuracy. The saved trace still contained answer-revealing fixture docstrings; the baseline must be rerun after final fixture cleanup for a cleaner assessment.
+
 ### v0.1.0 acceptance criteria
 
 - [x] A documented CLI command accepts a failure case and repository path (manually exercised).
 - [x] Agent can request `search_code` and `read_file` and complete a multi-step investigation (manual smoke test).
 - [x] Tool execution has repository-scoped checks and a tool-call budget (unit-tested components; not a hardened sandbox).
 - [x] A live investigation produced an `InvestigationReport` and passed business checks.
-- [ ] At least three reproducible bug fixtures are documented and exercised.
-- [ ] Tests pass in a newly created virtual environment (17 tests passed in the current `.venv`).
-- [ ] README reflects working features; demo command documented, but fresh-environment reproducibility not yet verified.
-- [ ] Release tagged `v0.1.0` only after criteria are satisfied.
+- [x] At least three reproducible bug fixtures are documented and exercised (simulated handlers).
+- [x] Full current pytest suite passes (25/25 in the existing `.venv`).
+- [ ] Verify installation and tests in a newly created virtual environment.
+- [ ] Final review of README commands, dependency setup, and fresh-environment reproducibility.
+- [ ] Tag `v0.1.0` only after all release criteria are satisfied.
 
 ## 8. Release roadmap
 
 | Version | Theme | Exit condition |
 | --- | --- | --- |
 | `v0.1.0` | Functional MVP | End-to-end CLI agent + tools + tests + demo fixtures |
-| `v0.2.0` | Evidence and reliability | Evidence attribution, stronger guardrails, evaluation baseline |
+| `v0.2.0` | Evidence and reliability | Evidence attribution, stronger guardrails, expanded/repeated evaluation |
 | `v0.3.0` | API and persistence | HTTP interface and stored investigations, if needed |
 | `v1.0.0` | Stable release | Documented, tested, reproducible, stable core contract |
 | `v1.0.1+` | Maintenance | Bug fixes and security patches |

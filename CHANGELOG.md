@@ -7,7 +7,7 @@ Notable changes to DevLens are tracked here. The project follows [Semantic Versi
 ### Added
 - Initial typed `InvestigationReport` schema and OpenAI Structured Outputs prototype.
 - Business-rule validation for observations and next steps.
-- pytest coverage for report validation, repository tools, and tool dispatch (17 tests passing locally).
+- pytest coverage for report validation, repository tools, tool dispatch, and mocked agent orchestration (25 tests passing locally: validation (5), repository tools (8), tool dispatch (4), mocked agent loop (4), fixture reproduction (2), evaluation summary (2)).
 - Read-only Python repository inspection tools: `search_code` and `read_file`.
 - OpenAI function-calling tool schemas and allowlisted tool dispatcher.
 - Bounded sequential investigation loop and structured report generation.
@@ -17,17 +17,27 @@ Notable changes to DevLens are tracked here. The project follows [Semantic Versi
 - Deterministic agent-loop tests using mocked OpenAI Responses API calls.
 - Structured tool execution traces with success and error information.
 - Tests for tool error recovery and maximum tool-call budgets.
+- Three reproducible API failure fixtures covering missing-user
+  handling, incorrect total calculation, and missing authorization.
+- JSON-based evaluation dataset with expected root causes.
+- Evaluation runner supporting full-suite and single-case execution.
+- Structured JSON evaluation artifacts containing investigation
+  reports and tool traces.
+- Evaluation summary utility reporting completion, report validity,
+  tool success, and average tool calls.
+- Fixture reproduction and evaluation-summary tests.
+- A recorded three-case evaluation run completed all cases with eight successful tool calls and valid structured reports (small sample; not a root-cause accuracy benchmark).
 
 ### In progress
-- Automated end-to-end regression tests and repeatability checks for the CLI investigation flow.
-- Integration tests for multi-step agent behavior and execution-budget boundaries.
+- Repeated live-model regression runs and broader failure/edge-case coverage.
+- Final release checks: fresh-environment reproducibility, updated documentation, and v0.1.0 tagging.
 
 ### Planned for v0.1.0
-- At least three reproducible API failure fixtures with documented expected behavior.
-- Repeatable CLI demo, automated agent-loop tests, and remaining release acceptance checks.
+- Complete final release acceptance checks and publish the first version tag.
 
 ### Known limitations
-- Unit tests do not verify model-driven diagnosis quality or evidence attribution.
+- Mock tests and operational evaluation metrics do not verify model-driven diagnosis quality or evidence attribution.
+- Current evaluation covers only three simulated Python API cases; automated root-cause grading is not implemented.
 - Repository access protections are intended for trusted local code, not a security sandbox.
 
 <!-- At release time, create a dated section such as:

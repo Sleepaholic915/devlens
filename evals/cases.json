@@ -1,0 +1,33 @@
+
+[
+  {
+    "id": "missing_user",
+    "repo": "examples/buggy_api",
+    "failure": "GET /api/users/999 expected HTTP 404 but returned HTTP 500 with body: Internal Server Error",
+    "expected": {
+      "root_cause": "Missing None check after user lookup",
+      "file": "app.py",
+      "fix": "Handle unknown users before accessing their fields"
+    }
+  },
+  {
+    "id": "incorrect_total",
+    "repo": "examples/incorrect_total",
+    "failure": "An order with price=100, quantity=2, and discount=0.10 should return total=180.00, but the API returns total=199.90 with status 200",
+    "expected": {
+      "root_cause": "Discount treated as a fixed amount instead of a percentage",
+      "file": "app.py",
+      "fix": "Apply the discount proportionally to the subtotal"
+    }
+  },
+  {
+    "id": "missing_authorization",
+    "repo": "examples/missing_authorization",
+    "failure": "Authenticated user 1 requests order 102, which belongs to user 2. Expected status 403 but the API returns 200 with the order details",
+    "expected": {
+      "root_cause": "Missing order ownership authorization check",
+      "file": "app.py",
+      "fix": "Verify order ownership before returning the order"
+    }
+  }
+]

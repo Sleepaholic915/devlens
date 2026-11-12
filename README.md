@@ -4,7 +4,7 @@
 
 DevLens helps developers investigate failed API requests by combining structured incident information with read-only source-code inspection. Its goal is to produce actionable investigation reports that clearly distinguish **observations**, **hypotheses**, and **next steps**.
 
-> **Project status:** Pre-MVP development. The first functional release is planned as **v0.1.0**. Agent orchestration and CLI code have been added but await end-to-end verification.
+> **Project status:** v0.1.0 release candidate (not yet tagged). The CLI agent has completed live investigations and a three-case evaluation run; final release checks remain.
 
 ## Why DevLens?
 
@@ -16,11 +16,14 @@ An HTTP 500 response often reveals little about the underlying failure. Develope
 | --- | --- | --- |
 | Structured investigation reports | Implemented | OpenAI Responses API + Pydantic |
 | Business-rule validation | Implemented | Required observations and next steps |
-| Automated unit tests | Implemented | 17 passing tests across validation, code tools, and dispatcher |
+| Automated unit tests | Implemented | 25 passing tests: 5 validation, 8 repository tools, 4 dispatch, 4 mocked agent-loop, 2 fixture, and 2 evaluation-summary tests |
 | Read-only `search_code` / `read_file` | Implemented, unit tested | Repository-scoped Python source inspection |
 | LLM function calling and bounded agent loop | Implemented, Tested | Allowlisted dispatcher; tool-call budget; sequential calls; Mock Integration Tests; Structured Tool Trace |
-| CLI and sample bug fixture | Implemented, E2E unverified | `run_investigation.py` and `examples/buggy_api/app.py` |
-| Evidence attribution and evaluation suite | Planned | Trace claims to code/logs and benchmark cases |
+| CLI and sample bug fixture | Implemented, live E2E exercised | `run_investigation.py` and `examples/buggy_api/app.py` |
+| Reproducible bug fixtures | Implemented | Three simulated API failure scenarios: missing user, incorrect total, and missing authorization. |
+| Evaluation runner | Implemented | Runs investigation cases and saves structured JSON artifacts. |
+| Evaluation summary | Implemented | Reports completion rate, report validity, tool success rate, and average tool calls. |
+| Root cause evaluation | Manual | Diagnosis quality is currently reviewed against known root causes; automated accuracy scoring is not yet implemented. |
 | HTTP API, persistence, deployment | Future | Added when justified by product requirements |
 
 ## Architecture (v0.1.0 implementation in verification)
@@ -48,7 +51,7 @@ API failure details + optional logs + repository path
               Structured output
 ```
 
-The modules shown above have been implemented as a prototype, but the complete LLM-driven CLI flow has not yet been verified end to end. See [Design](docs/design.md) for implementation boundaries and design decisions.
+The CLI-driven model-to-tool-to-report flow has been exercised live on three simulated API failure cases. This does not establish accuracy on production incidents. See [Design](docs/design.md) for implementation boundaries and design decisions.
 
 ## Tech stack
 
@@ -96,7 +99,29 @@ To try the **experimental agent CLI** against the intentionally buggy example re
 python run_investigation.py --repo examples/buggy_api --failure "GET /api/users/999 expected HTTP 404 but returned HTTP 500 with body: Internal Server Error"
 ```
 
-The CLI code is implemented, but its complete model-to-tool-to-report flow is **pending end-to-end verification**. The example is a simulated Python handler, not a running HTTP server. Reports are not yet independently evidence-verified.
+The model-to-tool-to-report flow has been exercised live. The example is a simulated Python handler, not a running HTTP server. Reports are not independently evidence-verified.
+
+### Running evaluations
+
+Run all evaluation cases (uses the API and may incur cost):
+
+```powershell
+python -m evals.run_evals
+```
+
+Run a specific case:
+
+```powershell
+python -m evals.run_evals --case incorrect_total
+```
+
+Summarize a saved evaluation run:
+
+```powershell
+python -m evals.summarize evals/results/<result_file>.json
+```
+
+Evaluation results are stored locally in `evals/results/`. A recorded three-case run completed all cases with eight successful tool calls and valid reports. The current metrics measure execution reliability and report validity, **not** automated root-cause accuracy. The baseline result predates the final fixture-cleanup verification and should not be presented as a post-cleanup benchmark without a new artifact.
 
 ## Engineering principles
 
@@ -123,7 +148,7 @@ See [CHANGELOG](CHANGELOG.md) for feature-based progress and release notes. Git 
 
 ## Current limitations
 
-DevLens is a development-stage prototype. The repository inspection tools and tool dispatcher have passing unit tests, but the complete agent CLI has not yet been verified end to end. Reports do **not independently verify a root cause** or enforce evidence references. The current file-access checks are intended for trusted local repositories, not as a hardened sandbox. Automated agent integration tests, evaluation, and stronger safety controls remain future work.
+DevLens is a release-candidate prototype. Its CLI has been exercised live, and mocked agent-loop tests and a small evaluation suite exist. Reports do **not independently verify a root cause** or enforce evidence references. The three fixtures are simulated Python handlers, not deployed HTTP endpoints; the evaluation does not establish statistical reliability or automated root-cause accuracy. Repository access is intended for trusted local code, not a hardened sandbox. Repeated real-model regression testing and stronger safety controls remain future work.
 
 ## License
 
