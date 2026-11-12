@@ -3,7 +3,7 @@
 **Document status:** Active / living design  
 **Project phase:** Pre-MVP  
 **Next target release:** `v0.1.0`  
-**Last revised:** 2026-11-11
+**Last revised:** 2026-11-12
 
 This document describes the architecture, design rationale, interfaces, safety constraints, and planned evolution of DevLens. It is organized by **capability and release**, not by study day. Statements are labeled **Implemented**, **In progress**, or **Planned** where appropriate.
 
@@ -251,6 +251,10 @@ Current limitations:
 
 A saved run (`20261111T150652Z`) recorded 3/3 completed investigations, 8/8 successful tool calls, and 3/3 valid reports (2.67 calls/case). These are **operational metrics**, not automated root-cause accuracy. The saved trace still contained answer-revealing fixture docstrings; the baseline must be rerun after final fixture cleanup for a cleaner assessment.
 
+### Final release verification (2026-11-12)
+
+A clean Python 3.11 virtual environment installed declared dependencies and passed all 25 tests. A fresh live investigation of the missing-user fixture completed with five successful tool calls, zero tool errors, and a structured report that identified the missing-user lookup and broad exception handler while explicitly noting unverified HTTP route wiring. Repository readiness checks passed. These checks establish MVP operability, not generalized diagnostic accuracy.
+
 ### v0.1.0 acceptance criteria
 
 - [x] A documented CLI command accepts a failure case and repository path (manually exercised).
@@ -258,9 +262,10 @@ A saved run (`20261111T150652Z`) recorded 3/3 completed investigations, 8/8 succ
 - [x] Tool execution has repository-scoped checks and a tool-call budget (unit-tested components; not a hardened sandbox).
 - [x] A live investigation produced an `InvestigationReport` and passed business checks.
 - [x] At least three reproducible bug fixtures are documented and exercised (simulated handlers).
-- [x] Full current pytest suite passes (25/25 in the existing `.venv`).
-- [ ] Verify installation and tests in a newly created virtual environment.
-- [ ] Final review of README commands, dependency setup, and fresh-environment reproducibility.
+- [x] Full pytest suite passes: 25/25 tests in a newly created `.venv-release` environment.
+- [x] Fresh-environment live CLI smoke test: five successful tool calls and a structured report for the missing-user scenario.
+- [x] GitHub repository hygiene and release-readiness checks passed.
+- [x] README commands, dependency setup, and fresh-environment reproducibility reviewed.
 - [ ] Tag `v0.1.0` only after all release criteria are satisfied.
 
 ## 8. Release roadmap

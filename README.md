@@ -4,7 +4,7 @@
 
 DevLens helps developers investigate failed API requests by combining structured incident information with read-only source-code inspection. Its goal is to produce actionable investigation reports that clearly distinguish **observations**, **hypotheses**, and **next steps**.
 
-> **Project status:** v0.1.0 release candidate (not yet tagged). The CLI agent has completed live investigations and a three-case evaluation run; final release checks remain.
+> **Project status:** v0.1.0 functional MVP (release documentation prepared; Git tag and GitHub Release pending). The CLI agent has passed live investigation checks and a three-case evaluation run.
 
 ## Why DevLens?
 
@@ -26,7 +26,7 @@ An HTTP 500 response often reveals little about the underlying failure. Develope
 | Root cause evaluation | Manual | Diagnosis quality is currently reviewed against known root causes; automated accuracy scoring is not yet implemented. |
 | HTTP API, persistence, deployment | Future | Added when justified by product requirements |
 
-## Architecture (v0.1.0 implementation in verification)
+## Architecture (v0.1.0)
 
 ```text
 API failure details + optional logs + repository path
@@ -148,7 +148,7 @@ See [CHANGELOG](CHANGELOG.md) for feature-based progress and release notes. Git 
 
 ## Current limitations
 
-DevLens is a release-candidate prototype. Its CLI has been exercised live, and mocked agent-loop tests and a small evaluation suite exist. Reports do **not independently verify a root cause** or enforce evidence references. The three fixtures are simulated Python handlers, not deployed HTTP endpoints; the evaluation does not establish statistical reliability or automated root-cause accuracy. Repository access is intended for trusted local code, not a hardened sandbox. Repeated real-model regression testing and stronger safety controls remain future work.
+DevLens is an early-stage functional MVP. Its CLI has been exercised live, and mocked agent-loop tests and a small evaluation suite exist. Reports do **not independently verify a root cause** or enforce evidence references. The three fixtures are simulated Python handlers, not deployed HTTP endpoints; the evaluation does not establish statistical reliability or automated root-cause accuracy. Repository access is intended for trusted local code, not a hardened sandbox. Repeated real-model regression testing and stronger safety controls remain future work.
 
 ## License
 

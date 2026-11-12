@@ -4,6 +4,10 @@ Notable changes to DevLens are tracked here. The project follows [Semantic Versi
 
 ## [Unreleased]
 
+_No unreleased changes recorded._
+
+## [0.1.0] - 2026-11-12
+
 ### Added
 - Initial typed `InvestigationReport` schema and OpenAI Structured Outputs prototype.
 - Business-rule validation for observations and next steps.
@@ -28,19 +32,13 @@ Notable changes to DevLens are tracked here. The project follows [Semantic Versi
 - Fixture reproduction and evaluation-summary tests.
 - A recorded three-case evaluation run completed all cases with eight successful tool calls and valid structured reports (small sample; not a root-cause accuracy benchmark).
 
-### In progress
-- Repeated live-model regression runs and broader failure/edge-case coverage.
-- Final release checks: fresh-environment reproducibility, updated documentation, and v0.1.0 tagging.
-
-### Planned for v0.1.0
-- Complete final release acceptance checks and publish the first version tag.
+### Verified for release
+- 25 automated tests passed in a newly created Python 3.11 virtual environment.
+- Fresh-environment live CLI investigation completed with 5/5 successful tool calls and a structured diagnosis.
+- GitHub repository hygiene and release-readiness checks passed.
 
 ### Known limitations
 - Mock tests and operational evaluation metrics do not verify model-driven diagnosis quality or evidence attribution.
 - Current evaluation covers only three simulated Python API cases; automated root-cause grading is not implemented.
 - Repository access protections are intended for trusted local code, not a security sandbox.
 
-<!-- At release time, create a dated section such as:
-## [0.1.0] - YYYY-MM-DD
-Move completed Unreleased items into it and tag the commit v0.1.0.
--->
