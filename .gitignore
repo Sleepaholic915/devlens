@@ -1,6 +1,7 @@
 
 # Python virtual environment
 .venv/
+.venv-release/
 
 # Local secrets
 .env
